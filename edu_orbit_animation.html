@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>EDU ORBIT — Three.js Animation</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    html,body { height:100%; margin:0; background: #05020a; overflow:hidden; font-family: system-ui, sans-serif;}
+    #container { width:100%; height:100vh; display:block; }
+    .credit {
+      position: absolute;
+      left: 16px;
+      bottom: 14px;
+      color: rgba(255,255,255,0.6);
+      font-size: 13px;
+      z-index: 5;
+      user-select:none;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <div class="credit">EDU ORBIT — Three.js demo • Theme: magenta / deep purple / cyan</div>
+
+  <!-- Three.js + OrbitControls + GSAP (for animation) from CDNs -->
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
+    import { OrbitControls } from 'https://unpkg.com/three@0.155.0/examples/jsm/controls/OrbitControls.js';
+    import { GLTFLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js';
+    // GSAP for smooth timing
+    import { gsap } from 'https://unpkg.com/gsap@3.12.2/index.js';
+
+    const container = document.getElementById('container');
+    const scene = new THREE.Scene();
+
+    // Background subtle gradient by large sphere + shaderless approach:
+    scene.background = new THREE.Color(0x040114);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    const camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 2000);
+    camera.position.set(0, 6, 18);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 6;
+    controls.maxDistance = 50;
+
+    // THEME COLORS
+    const magenta = new THREE.Color('#ff4db8'); // primary
+    const deepPurple = new THREE.Color('#2a004f'); // secondary
+    const cyan = new THREE.Color('#00f0ff'); // accent
+
+    // Add subtle ambient + directional light for overall scene
+    const ambient = new THREE.AmbientLight('#7b3aa6', 0.8); // purple-ish ambient
+    scene.add(ambient);
+
+    const sunLight = new THREE.PointLight('#ffd6e6', 2.2, 200);
+    sunLight.position.set(0,0,0); // sun will be at origin when revealed
+    scene.add(sunLight);
+
+    // STARS - particle field
+    function addStars(count=1200) {
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      const sizes = new Float32Array(count);
+      for (let i=0;i<count;i++){
+        const r = THREE.MathUtils.randFloat(30, 150);
+        const theta = THREE.MathUtils.randFloat(0, Math.PI*2);
+        const phi = THREE.MathUtils.randFloat(0, Math.PI);
+        positions[i*3+0] = r * Math.sin(phi) * Math.cos(theta);
+        positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+        positions[i*3+2] = r * Math.cos(phi);
+        sizes[i] = Math.random()*1.5 + 0.2;
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+      geo.setAttribute('size', new THREE.BufferAttribute(sizes,1));
+      const mat = new THREE.PointsMaterial({ size: 0.12, transparent:true, opacity:0.9, depthWrite:false});
+      mat.color = new THREE.Color('#c0a0ff');
+      const points = new THREE.Points(geo, mat);
+      scene.add(points);
+    }
+    addStars();
+
+    function makeGlowSprite(size=1, color=magenta) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createRadialGradient(128,128,10,128,128,128);
+      const cstr = '#' + color.getHexString();
+      gradient.addColorStop(0, cstr);
+      gradient.addColorStop(0.2, cstr);
+      gradient.addColorStop(0.5, 'rgba(0,0,0,0.05)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0.0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0,0,256,256);
+      const tex = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.SpriteMaterial({ map:tex, blending:THREE.AdditiveBlending, transparent:true });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(size,size,size);
+      return sprite;
+    }
+
+    const book = new THREE.Group();
+    book.position.set(0, -1.0, 0);
+    scene.add(book);
+
+    const coverMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#2b003f'),
+      metalness: 0.2,
+      roughness: 0.2,
+      emissive: new THREE.Color('#3d003a'),
+      emissiveIntensity: 0.6,
+    });
+
+    function makeTitleTexture(text) {
+      const w=1024, h=1024;
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,w,h);
+      const grad = ctx.createLinearGradient(0,0,w,0);
+      grad.addColorStop(0, '#ff4db8');
+      grad.addColorStop(0.5, '#ffb3f0');
+      grad.addColorStop(1, '#00f0ff');
+      ctx.fillStyle = grad;
+      ctx.font = '150px "Arial Black", Gadget, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(255, 75, 184, 0.45)';
+      ctx.shadowBlur = 30;
+      ctx.fillText(text, w/2, h/2);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    const bookWidth = 10;
+    const bookHeight = 0.6;
+    const bookDepth = 7;
+    const bottomCoverGeo = new THREE.BoxGeometry(bookWidth, bookHeight, bookDepth);
+    const bottomCover = new THREE.Mesh(bottomCoverGeo, coverMat);
+    bottomCover.position.set(0, 0, 0);
+    book.add(bottomCover);
+
+    const topCoverGeo = new THREE.BoxGeometry(bookWidth, bookHeight, bookDepth);
+    const topCover = new THREE.Mesh(topCoverGeo, coverMat);
+    const topPivot = new THREE.Group();
+    topPivot.position.set(0, 0, -bookDepth/2 + 0.001);
+    topCover.position.set(0, 0, bookDepth/2 - 0.001);
+    topPivot.add(topCover);
+    book.add(topPivot);
+
+    const pagesGeo = new THREE.BoxGeometry(bookWidth - 0.2, bookHeight - 0.12, bookDepth - 0.5);
+    const pagesMat = new THREE.MeshStandardMaterial({
+      color: '#f6f0e9',
+      roughness: 0.9,
+      metalness: 0.0,
+    });
+    const pages = new THREE.Mesh(pagesGeo, pagesMat);
+    pages.position.set(0, 0.01, 0.12);
+    book.add(pages);
+
+    const titleTexture = makeTitleTexture('EDU ORBIT');
+    const titleMat = new THREE.MeshBasicMaterial({ map: titleTexture, transparent: true });
+    const titlePlane = new THREE.Mesh(new THREE.PlaneGeometry(bookWidth*0.9, bookHeight*0.6), titleMat);
+    titlePlane.position.set(0, 0.002, bookDepth/2 + 0.01);
+    book.add(titlePlane);
+
+    const bookGlow = makeGlowSprite(8, magenta);
+    bookGlow.position.set(0, 0.1, 1.2);
+    book.add(bookGlow);
+
+    const solarHolder = new THREE.Group();
+    solarHolder.position.set(0, 0.5, 0);
+    solarHolder.scale.set(0.001,0.001,0.001);
+    scene.add(solarHolder);
+
+    const sunGeo = new THREE.SphereGeometry(1.4, 32, 32);
+    const sunMat = new THREE.MeshBasicMaterial({ color: '#ffccff', emissive: '#ffb3e6', transparent:true });
+    const sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.position.set(0, 2.5, 0);
+    const sunGlow = makeGlowSprite(6, new THREE.Color('#ff7fbf'));
+    sunGlow.position.copy(sun.position);
+    solarHolder.add(sunGlow);
+    solarHolder.add(sun);
+
+    const planets = [];
+    const planetDefs = [
+      {name:'Mercury', size:0.22, distance:2.6, speed:0.022, color:'#bfaeff'},
+      {name:'Venus', size:0.5, distance:3.6, speed:0.018, color:'#ffb3c6'},
+      {name:'Earth', size:0.55, distance:4.8, speed:0.014, color:'#7ad1ff'},
+      {name:'Mars', size:0.36, distance:5.7, speed:0.012, color:'#ff8a6b'},
+    ];
+
+    planetDefs.forEach((p) => {
+      const g = new THREE.Group();
+      g.position.set(0, sun.position.y, 0);
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(p.size, 28, 28), new THREE.MeshStandardMaterial({
+        color: p.color, roughness:0.7, metalness:0.05, emissive: p.color
+      }));
+      sphere.position.set(p.distance, 0, 0);
+      g.add(sphere);
+      solarHolder.add(g);
+      planets.push({group:g, mesh:sphere, def:p});
+    });
+
+    const saturnGroup = new THREE.Group();
+    saturnGroup.position.set(0, sun.position.y, 0);
+    const saturnDistance = 8.0;
+    const saturnSize = 1.0;
+    const saturnGeo = new THREE.SphereGeometry(saturnSize, 48, 48);
+    const loader = new THREE.TextureLoader();
+    const satTex = loader.load('./saturn.jpg');
+    const satMat = new THREE.MeshStandardMaterial({
+      map: satTex,
+      roughness: 0.6,
+      metalness: 0.02,
+      emissive: new THREE.Color('#2a002a'),
+      emissiveIntensity: 0.15
+    });
+    const saturnMesh = new THREE.Mesh(saturnGeo, satMat);
+    saturnMesh.position.set(saturnDistance, 0, 0);
+    saturnGroup.add(saturnMesh);
+    const ringGeo = new THREE.RingGeometry(saturnSize*1.25, saturnSize*2.3, 64);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: '#ff4db8',
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = Math.PI * 0.45;
+    ringMesh.position.set(saturnDistance, 0, 0);
+    const ringInner = ringMesh.clone();
+    ringInner.material = ringMat.clone();
+    ringInner.material.opacity = 0.35;
+    ringInner.scale.set(0.88,0.88,0.88);
+    saturnGroup.add(ringMesh);
+    saturnGroup.add(ringInner);
+    solarHolder.add(saturnGroup);
+    planets.push({group: saturnGroup, mesh: saturnMesh, def:{name:'Saturn', size:saturnSize, distance:saturnDistance, speed:0.008}});
+
+    const orbitGroup = new THREE.Group();
+    orbitGroup.position.set(0,0,0);
+    solarHolder.add(orbitGroup);
+    function makeOrbit(radius) {
+      const geo = new THREE.RingGeometry(radius-0.01, radius+0.01, 128);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:'#2a003f', transparent:true, opacity:0.12, side:THREE.DoubleSide }));
+      mesh.rotation.x = Math.PI/2;
+      mesh.position.set(0, sun.position.y, 0);
+      return mesh;
+    }
+    [2.6,3.6,4.8,5.7,8.0].forEach(r => { orbitGroup.add(makeOrbit(r)); });
+
+    gsap.to(book.position, { y: -0.8, duration: 1.6, yoyo:true, repeat: -1, ease:'sine.inOut' });
+    const timeline = gsap.timeline({ delay: 1.2 });
+    timeline.to(bookGlow.scale, { x: 9, y:9, z:9, duration: 0.9, ease:'power2.inOut', yoyo:true, repeat:1 }, 0.15);
+    timeline.to(topPivot.rotation, { x: -Math.PI/2, duration: 1.2, ease:'power2.inOut' }, 0.6);
+    timeline.to(solarHolder.scale, { x: 1, y:1, z:1, duration: 1.1, ease: 'back.out(1.2)' }, 0.9);
+    timeline.to(solarHolder.position, { y: 2.3, duration: 1.1, ease:'power2.out' }, 0.9);
+    timeline.to(sunLight, { intensity: 2.5, duration: 1.1 }, 0.9);
+    timeline.to(bookGlow.material, { opacity: 0.95, duration: 0.6, yoyo:true, repeat:1 }, 0.9);
+    timeline.to({}, { duration: 2.0 });
+    timeline.to(saturnGroup.position, { x: 1.5, z: 0.2, y: sun.position.y, duration: 1.6, ease:'power2.inOut' }, '+=0.2');
+    timeline.to(saturnGroup.scale, { x: 3.9, y:3.9, z:3.9, duration: 1.6, ease:'power3.inOut' }, '<');
+    timeline.to(saturnMesh.rotation, { y: Math.PI*2 * 1.5, duration: 1.8, ease:'power2.inOut' }, '<');
+    timeline.to(book.scale, { x:0.4, y:0.4, z:0.4, duration:1.2, ease:'power2.in' }, '+=0.4');
+    timeline.to(book.position, { y: -6, duration: 1.4, ease:'power2.in' }, '<');
+
+    const startTime = performance.now();
+    function animate(){
+      requestAnimationFrame(animate);
+      const t = (performance.now() - startTime) * 0.001;
+      solarHolder.rotation.y = t * 0.08;
+      planets.forEach((p, idx) => {
+        const speed = p.def.speed || (0.01 + idx * 0.002);
+        p.group.rotation.y = t * speed;
+        p.mesh.rotation.y += 0.005 + (p.def.size * 0.002);
+      });
+      ringMesh.rotation.z += 0.003;
+      ringInner.rotation.z -= 0.002;
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }, false);
+  </script>
+</body>
+</html>
